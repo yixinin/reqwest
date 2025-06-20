@@ -4,10 +4,9 @@ use bytes::Bytes;
 use h3::client::SendRequest;
 use h3_quinn::{Connection, OpenStreams};
 use http::Uri;
+use std::error::Error as StdError;
 use std::future::Future;
 use std::pin::Pin;
-
-use crate::error::BoxError;
 
 pub type H3Connection = (
     h3::client::Connection<Connection, Bytes>,
@@ -15,7 +14,8 @@ pub type H3Connection = (
 );
 
 ///
-pub type H3Connecting = Pin<Box<dyn Future<Output = Result<H3Connection, BoxError>> + Send>>;
+pub type H3Connecting =
+    Pin<Box<dyn Future<Output = Result<H3Connection, Box<dyn StdError + Send + Sync>>> + Send>>;
 
 ///
 pub trait H3Connector: std::fmt::Debug + Send + Sync {
