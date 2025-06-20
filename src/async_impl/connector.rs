@@ -8,6 +8,7 @@ use std::error::Error as StdError;
 use std::future::Future;
 use std::pin::Pin;
 
+///
 pub type H3Connection = (
     h3::client::Connection<Connection, Bytes>,
     SendRequest<OpenStreams, Bytes>,

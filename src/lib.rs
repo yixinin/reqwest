@@ -357,7 +357,7 @@ if_hyper! {
     doctest!("../README.md");
 
     pub use self::async_impl::{
-        Body, Client, ClientBuilder, Request, RequestBuilder, Response, Upgraded, H3Connector, DynH3Connector, H3Connecting,
+        Body, Client, ClientBuilder, Request, RequestBuilder, Response, Upgraded, H3Connector, DynH3Connector, H3Connecting, H3Connection,
     };
     pub use self::proxy::{Proxy,NoProxy};
     #[cfg(feature = "__tls")]
