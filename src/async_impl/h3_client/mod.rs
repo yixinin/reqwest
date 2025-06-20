@@ -1,6 +1,7 @@
 #![cfg(feature = "http3")]
 
-pub(crate) mod connect;
+pub mod connect;
+pub mod connector;
 pub(crate) mod dns;
 mod pool;
 
@@ -10,7 +11,7 @@ use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
 use crate::cookie;
 use crate::error::{BoxError, Error, Kind};
 use crate::{error, Body};
-use connect::H3Connector;
+use connector::DynH3Connector;
 use http::{Request, Response};
 use log::trace;
 use std::future::{self, Future};
@@ -25,14 +26,14 @@ use tower::Service;
 #[derive(Clone)]
 pub(crate) struct H3Client {
     pool: Pool,
-    connector: H3Connector,
+    connector: DynH3Connector,
     #[cfg(feature = "cookies")]
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
 }
 
 impl H3Client {
     #[cfg(not(feature = "cookies"))]
-    pub fn new(connector: H3Connector, pool_timeout: Option<Duration>) -> Self {
+    pub fn new(connector: DynH3Connector, pool_timeout: Option<Duration>) -> Self {
         H3Client {
             pool: Pool::new(pool_timeout),
             connector,

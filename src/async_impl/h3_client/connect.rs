@@ -1,9 +1,9 @@
+use crate::async_impl::h3_client::connector::{H3Connection, H3Connector};
 use crate::async_impl::h3_client::dns::resolve;
 use crate::dns::DynResolver;
 use crate::error::BoxError;
-use bytes::Bytes;
-use h3::client::SendRequest;
-use h3_quinn::{Connection, OpenStreams};
+
+use h3_quinn::Connection;
 use http::Uri;
 use hyper_util::client::legacy::connect::dns::Name;
 use quinn::crypto::rustls::QuicClientConfig;
@@ -11,11 +11,6 @@ use quinn::{ClientConfig, Endpoint, TransportConfig};
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
-
-type H3Connection = (
-    h3::client::Connection<Connection, Bytes>,
-    SendRequest<OpenStreams, Bytes>,
-);
 
 /// H3 Client Config
 #[derive(Clone)]
@@ -55,13 +50,13 @@ impl Default for H3ClientConfig {
 }
 
 #[derive(Clone)]
-pub(crate) struct H3Connector {
+pub(crate) struct H3QuinnConnector {
     resolver: DynResolver,
     endpoint: Endpoint,
     client_config: H3ClientConfig,
 }
 
-impl H3Connector {
+impl H3QuinnConnector {
     pub fn new(
         resolver: DynResolver,
         tls: rustls::ClientConfig,
@@ -69,7 +64,7 @@ impl H3Connector {
         local_port: Option<u16>,
         transport_config: TransportConfig,
         client_config: H3ClientConfig,
-    ) -> Result<H3Connector, BoxError> {
+    ) -> Result<H3QuinnConnector, BoxError> {
         let quic_client_config = Arc::new(QuicClientConfig::try_from(tls)?);
         let mut config = ClientConfig::new(quic_client_config);
         // FIXME: Replace this when there is a setter.
@@ -92,7 +87,7 @@ impl H3Connector {
         })
     }
 
-    pub async fn connect(&mut self, dest: Uri) -> Result<H3Connection, BoxError> {
+    pub async fn connect_dest(&mut self, dest: Uri) -> Result<H3Connection, BoxError> {
         let host = dest
             .host()
             .ok_or("destination must have a host")?
@@ -143,5 +138,21 @@ impl H3Connector {
             Some(e) => Err(Box::new(e) as BoxError),
             None => Err("failed to establish connection for HTTP/3 request".into()),
         }
+    }
+}
+
+impl H3Connector for H3QuinnConnector {
+    fn connect(&self, dest: Uri) -> super::connector::Connecting {
+        let mut connector = self.clone();
+        Box::pin(async move {
+            let connection = connector.connect_dest(dest).await?;
+            Ok(connection)
+        })
+    }
+}
+
+impl std::fmt::Debug for H3QuinnConnector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "quinn quic connector")
     }
 }
