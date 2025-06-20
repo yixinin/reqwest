@@ -14,10 +14,10 @@ pub type H3Connection = (
     SendRequest<OpenStreams, Bytes>,
 );
 
-pub type Connecting = Pin<Box<dyn Future<Output = Result<H3Connection, BoxError>> + Send>>;
+pub type H3Connecting = Pin<Box<dyn Future<Output = Result<H3Connection, BoxError>> + Send>>;
 
 pub trait H3Connector: std::fmt::Debug + Send + Sync {
-    fn connect(&self, dest: Uri) -> Connecting;
+    fn connect(&self, dest: Uri) -> H3Connecting;
 }
 
 #[derive(Debug, Clone)]
@@ -29,7 +29,7 @@ impl DynH3Connector {
     pub fn new(connector: Arc<dyn H3Connector>) -> Self {
         return Self { connector };
     }
-    pub fn connect(&self, dest: Uri) -> Connecting {
+    pub fn connect(&self, dest: Uri) -> H3Connecting {
         self.connector.connect(dest)
     }
 }

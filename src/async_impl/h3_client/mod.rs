@@ -1,17 +1,16 @@
 #![cfg(feature = "http3")]
 
 pub mod connect;
-pub mod connector;
 pub(crate) mod dns;
 mod pool;
 
+use super::DynH3Connector;
 use crate::async_impl::body::ResponseBody;
 use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
 #[cfg(feature = "cookies")]
 use crate::cookie;
 use crate::error::{BoxError, Error, Kind};
 use crate::{error, Body};
-use connector::DynH3Connector;
 use http::{Request, Response};
 use log::trace;
 use std::future::{self, Future};

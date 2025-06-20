@@ -16,9 +16,9 @@ use super::request::{Request, RequestBuilder};
 use super::response::Response;
 use super::Body;
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::connect::H3ClientConfig;
+use crate::async_impl::connector::DynH3Connector;
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::connector::DynH3Connector;
+use crate::async_impl::h3_client::connect::H3ClientConfig;
 #[cfg(feature = "http3")]
 use crate::async_impl::h3_client::H3Client;
 use crate::config::{RequestConfig, RequestTimeout};

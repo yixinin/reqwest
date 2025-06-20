@@ -1,5 +1,6 @@
-use crate::async_impl::h3_client::connector::{H3Connection, H3Connector};
+use crate::async_impl::connector::{H3Connection, H3Connector};
 use crate::async_impl::h3_client::dns::resolve;
+use crate::async_impl::H3Connecting;
 use crate::dns::DynResolver;
 use crate::error::BoxError;
 
@@ -142,7 +143,7 @@ impl H3QuinnConnector {
 }
 
 impl H3Connector for H3QuinnConnector {
-    fn connect(&self, dest: Uri) -> super::connector::Connecting {
+    fn connect(&self, dest: Uri) -> H3Connecting {
         let mut connector = self.clone();
         Box::pin(async move {
             let connection = connector.connect_dest(dest).await?;
