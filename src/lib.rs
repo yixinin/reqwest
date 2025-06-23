@@ -357,8 +357,23 @@ if_hyper! {
     doctest!("../README.md");
 
     pub use self::async_impl::{
-        Body, Client, ClientBuilder, Request, RequestBuilder, Response, Upgraded, H3Connector, DynH3Connector, H3Connecting, H3Connection,
+        Body, Client, ClientBuilder, Request, RequestBuilder, Response, Upgraded,
     };
+
+    #[cfg(feature = "http3")]
+    pub use self::async_impl::{
+        H3Connector, DynH3Connector, H3Connecting, H3Connection
+    };
+    #[cfg(feature = "h3-quinn")]
+    pub use self::async_impl::{
+        H3QuinnConnector
+    };
+
+    #[cfg(feature = "h3-s2n-quic")]
+    pub use self::async_impl::{
+        H3S2nQuicConnector
+    };
+
     pub use self::proxy::{Proxy,NoProxy};
     #[cfg(feature = "__tls")]
     // Re-exports, to be removed in a future release

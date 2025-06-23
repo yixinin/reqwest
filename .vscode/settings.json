@@ -1,0 +1,15 @@
+{
+    "rust-analyzer.cargo.extraEnv": {
+        "RUSTFLAGS": "--cfg reqwest_unstable"
+    },
+    "rust-analyzer.cargo.features": [
+        "http3",
+        "h3-s2n-quic",
+        "h3-quinn",
+    ],
+    "rust-analyzer.check.features": [
+        "http3",
+        "h3-s2n-quic",
+        "h3-quinn",
+    ],
+}

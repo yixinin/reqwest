@@ -4,60 +4,22 @@ use crate::async_impl::H3Connecting;
 use crate::dns::DynResolver;
 use crate::error::BoxError;
 
-use h3_quinn::Connection;
+use super::{Connection, OpenStreams};
+use crate::async_impl::h3_client::H3ClientConfig;
 use http::Uri;
 use hyper_util::client::legacy::connect::dns::Name;
-use quinn::crypto::rustls::QuicClientConfig;
-use quinn::{ClientConfig, Endpoint, TransportConfig};
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
 
-/// H3 Client Config
 #[derive(Clone)]
-pub(crate) struct H3ClientConfig {
-    /// Set the maximum HTTP/3 header size this client is willing to accept.
-    ///
-    /// See [header size constraints] section of the specification for details.
-    ///
-    /// [header size constraints]: https://www.rfc-editor.org/rfc/rfc9114.html#name-header-size-constraints
-    ///
-    /// Please see docs in [`Builder`] in [`h3`].
-    ///
-    /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.max_field_section_size
-    pub(crate) max_field_section_size: Option<u64>,
-
-    /// Enable whether to send HTTP/3 protocol grease on the connections.
-    ///
-    /// Just like in HTTP/2, HTTP/3 also uses the concept of "grease"
-    ///
-    /// to prevent potential interoperability issues in the future.
-    /// In HTTP/3, the concept of grease is used to ensure that the protocol can evolve
-    /// and accommodate future changes without breaking existing implementations.
-    ///
-    /// Please see docs in [`Builder`] in [`h3`].
-    ///
-    /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.send_grease
-    pub(crate) send_grease: Option<bool>,
-}
-
-impl Default for H3ClientConfig {
-    fn default() -> Self {
-        Self {
-            max_field_section_size: None,
-            send_grease: None,
-        }
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct H3QuinnConnector {
+pub struct H3S2nQuicConnector {
     resolver: DynResolver,
-    endpoint: Endpoint,
+    client: s2n_quic::Client,
     client_config: H3ClientConfig,
 }
 
-impl H3QuinnConnector {
+impl H3S2nQuicConnector {
     pub fn new(
         resolver: DynResolver,
         tls: rustls::ClientConfig,
@@ -65,12 +27,7 @@ impl H3QuinnConnector {
         local_port: Option<u16>,
         transport_config: TransportConfig,
         client_config: H3ClientConfig,
-    ) -> Result<H3QuinnConnector, BoxError> {
-        let quic_client_config = Arc::new(QuicClientConfig::try_from(tls)?);
-        let mut config = ClientConfig::new(quic_client_config);
-        // FIXME: Replace this when there is a setter.
-        config.transport_config(Arc::new(transport_config));
-
+    ) -> Result<H3S2nQuicConnector, BoxError> {
         let socket_addr = match local_addr {
             Some(ip) => SocketAddr::new(ip, local_port.unwrap_or(0)),
             None => format!("[::]:{}", local_port.unwrap_or(0))
@@ -78,12 +35,16 @@ impl H3QuinnConnector {
                 .unwrap(),
         };
 
-        let mut endpoint = Endpoint::client(socket_addr)?;
-        endpoint.set_default_client_config(config);
+        // let mut endpoint = Endpoint::client(socket_addr)?;
+        // endpoint.set_default_client_config(config);
+        let client = s2n_quic::Client::builder()
+            .with_io(socket_addr)?
+            .with_tls(tls)?
+            .start()?;
 
         Ok(Self {
             resolver,
-            endpoint,
+            client,
             client_config,
         })
     }
@@ -142,7 +103,7 @@ impl H3QuinnConnector {
     }
 }
 
-impl H3Connector for H3QuinnConnector {
+impl H3Connector for H3S2nQuicConnector {
     fn connect(&self, dest: Uri) -> H3Connecting {
         let mut connector = self.clone();
         Box::pin(async move {
@@ -152,7 +113,7 @@ impl H3Connector for H3QuinnConnector {
     }
 }
 
-impl std::fmt::Debug for H3QuinnConnector {
+impl std::fmt::Debug for H3S2nQuicConnector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "quinn quic connector")
     }

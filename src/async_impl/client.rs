@@ -18,9 +18,7 @@ use super::Body;
 #[cfg(feature = "http3")]
 use crate::async_impl::connector::DynH3Connector;
 #[cfg(feature = "http3")]
-use crate::async_impl::h3_client::connect::H3ClientConfig;
-#[cfg(feature = "http3")]
-use crate::async_impl::h3_client::H3Client;
+use crate::async_impl::H3Client;
 use crate::config::{RequestConfig, RequestTimeout};
 use crate::connect::{
     sealed::{Conn, Unnameable},
@@ -55,10 +53,6 @@ use hyper_util::client::legacy::connect::HttpConnector;
 #[cfg(feature = "default-tls")]
 use native_tls_crate::TlsConnector;
 use pin_project_lite::pin_project;
-#[cfg(feature = "http3")]
-use quinn::TransportConfig;
-#[cfg(feature = "http3")]
-use quinn::VarInt;
 use tokio::time::Sleep;
 use tower::util::BoxCloneSyncServiceLayer;
 use tower::{Layer, Service};
@@ -249,10 +243,6 @@ struct Config {
     #[cfg(feature = "http3")]
     quic_max_idle_timeout: Option<Duration>,
     #[cfg(feature = "http3")]
-    quic_stream_receive_window: Option<VarInt>,
-    #[cfg(feature = "http3")]
-    quic_receive_window: Option<VarInt>,
-    #[cfg(feature = "http3")]
     quic_send_window: Option<u64>,
     #[cfg(feature = "http3")]
     quic_congestion_bbr: bool,
@@ -378,10 +368,6 @@ impl ClientBuilder {
                 #[cfg(feature = "http3")]
                 quic_max_idle_timeout: None,
                 #[cfg(feature = "http3")]
-                quic_stream_receive_window: None,
-                #[cfg(feature = "http3")]
-                quic_receive_window: None,
-                #[cfg(feature = "http3")]
                 quic_send_window: None,
                 #[cfg(feature = "http3")]
                 quic_congestion_bbr: false,
@@ -447,81 +433,6 @@ impl ClientBuilder {
 
             let mut http = HttpConnector::new_with_resolver(resolver.clone());
             http.set_connect_timeout(config.connect_timeout);
-
-            #[cfg(all(feature = "http3", feature = "__rustls"))]
-            let build_h3_connector =
-                |resolver,
-                 tls,
-                 quic_max_idle_timeout: Option<Duration>,
-                 quic_stream_receive_window,
-                 quic_receive_window,
-                 quic_send_window,
-                 quic_congestion_bbr,
-                 quic_keep_alive_interval,
-                 h3_max_field_section_size,
-                 h3_send_grease,
-                 local_address,
-                 local_port,
-                 http_version_pref: &HttpVersionPref| {
-                    use crate::async_impl::h3_client::connect::H3QuinnConnector;
-
-                    let mut transport_config = TransportConfig::default();
-
-                    if let Some(max_idle_timeout) = quic_max_idle_timeout {
-                        transport_config.max_idle_timeout(Some(
-                            max_idle_timeout.try_into().map_err(error::builder)?,
-                        ));
-                    }
-
-                    if let Some(stream_receive_window) = quic_stream_receive_window {
-                        transport_config.stream_receive_window(stream_receive_window);
-                    }
-
-                    if let Some(receive_window) = quic_receive_window {
-                        transport_config.receive_window(receive_window);
-                    }
-
-                    if let Some(send_window) = quic_send_window {
-                        transport_config.send_window(send_window);
-                    }
-
-                    transport_config.keep_alive_interval(quic_keep_alive_interval);
-
-                    if quic_congestion_bbr {
-                        let factory = Arc::new(quinn::congestion::BbrConfig::default());
-                        transport_config.congestion_controller_factory(factory);
-                    }
-
-                    let mut h3_client_config = H3ClientConfig::default();
-
-                    if let Some(max_field_section_size) = h3_max_field_section_size {
-                        h3_client_config.max_field_section_size = Some(max_field_section_size);
-                    }
-
-                    if let Some(send_grease) = h3_send_grease {
-                        h3_client_config.send_grease = Some(send_grease);
-                    }
-
-                    let res = H3QuinnConnector::new(
-                        resolver,
-                        tls,
-                        local_address,
-                        local_port,
-                        transport_config,
-                        h3_client_config,
-                    );
-
-                    match res {
-                        Ok(connector) => Ok(Some(DynH3Connector::new(Arc::new(connector)))),
-                        Err(err) => {
-                            if let HttpVersionPref::Http3 = http_version_pref {
-                                Err(error::builder(err))
-                            } else {
-                                Ok(None)
-                            }
-                        }
-                    }
-                };
 
             #[cfg(feature = "__tls")]
             match config.tls {
@@ -639,49 +550,28 @@ impl ClientBuilder {
                     config.tls_info,
                 ),
                 #[cfg(feature = "__rustls")]
-                TlsBackend::BuiltRustls(conn) => {
-                    #[cfg(feature = "http3")]
-                    {
-                        h3_connector = build_h3_connector(
-                            resolver.clone(),
-                            conn.clone(),
-                            config.quic_max_idle_timeout,
-                            config.quic_stream_receive_window,
-                            config.quic_receive_window,
-                            config.quic_send_window,
-                            config.quic_congestion_bbr,
-                            config.quic_keep_alive_interval,
-                            config.h3_max_field_section_size,
-                            config.h3_send_grease,
-                            config.local_address,
-                            config.quic_local_port,
-                            &config.http_version_pref,
-                        )?;
-                    }
-
-                    ConnectorBuilder::new_rustls_tls(
-                        http,
-                        conn,
-                        proxies.clone(),
-                        user_agent(&config.headers),
-                        config.local_address,
-                        #[cfg(any(
-                            target_os = "android",
-                            target_os = "fuchsia",
-                            target_os = "illumos",
-                            target_os = "ios",
-                            target_os = "linux",
-                            target_os = "macos",
-                            target_os = "solaris",
-                            target_os = "tvos",
-                            target_os = "visionos",
-                            target_os = "watchos",
-                        ))]
-                        config.interface.as_deref(),
-                        config.nodelay,
-                        config.tls_info,
-                    )
-                }
+                TlsBackend::BuiltRustls(conn) => ConnectorBuilder::new_rustls_tls(
+                    http,
+                    conn,
+                    proxies.clone(),
+                    user_agent(&config.headers),
+                    config.local_address,
+                    #[cfg(any(
+                        target_os = "android",
+                        target_os = "fuchsia",
+                        target_os = "illumos",
+                        target_os = "ios",
+                        target_os = "linux",
+                        target_os = "macos",
+                        target_os = "solaris",
+                        target_os = "tvos",
+                        target_os = "visionos",
+                        target_os = "watchos",
+                    ))]
+                    config.interface.as_deref(),
+                    config.nodelay,
+                    config.tls_info,
+                ),
                 #[cfg(feature = "__rustls")]
                 TlsBackend::Rustls => {
                     use crate::tls::{IgnoreHostname, NoVerifier};
@@ -843,27 +733,6 @@ impl ClientBuilder {
                                 "http/1.1".into(),
                             ];
                         }
-                    }
-
-                    #[cfg(feature = "http3")]
-                    {
-                        tls.enable_early_data = config.tls_enable_early_data;
-
-                        h3_connector = build_h3_connector(
-                            resolver.clone(),
-                            tls.clone(),
-                            config.quic_max_idle_timeout,
-                            config.quic_stream_receive_window,
-                            config.quic_receive_window,
-                            config.quic_send_window,
-                            config.quic_congestion_bbr,
-                            config.quic_keep_alive_interval,
-                            config.h3_max_field_section_size,
-                            config.h3_send_grease,
-                            config.local_address,
-                            config.quic_local_port,
-                            &config.http_version_pref,
-                        )?;
                     }
 
                     ConnectorBuilder::new_rustls_tls(

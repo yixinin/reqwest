@@ -10,11 +10,12 @@ use tokio::sync::{oneshot, watch};
 use tokio::time::Instant;
 
 use crate::async_impl::body::ResponseBody;
+use crate::async_impl::h3_client::stream::DynOpenStream;
 use crate::error::{BoxError, Error, Kind};
 use crate::Body;
 use bytes::Buf;
 use h3::client::SendRequest;
-use h3_quinn::{Connection, OpenStreams};
+use h3::quic::SendStream;
 use http::uri::{Authority, Scheme};
 use http::{Request, Response, Uri};
 use log::{error, trace};
@@ -140,8 +141,8 @@ impl Pool {
     pub fn new_connection(
         &mut self,
         lock: ConnectingLock,
-        mut driver: h3::client::Connection<Connection, Bytes>,
-        tx: SendRequest<OpenStreams, Bytes>,
+        mut driver: h3::client::Connection<super::connection::DynConnection<Bytes>, Bytes>,
+        tx: SendRequest<DynOpenStream<Bytes>, Bytes>,
     ) -> PoolClient {
         let (close_tx, close_rx) = std::sync::mpsc::channel();
         tokio::spawn(async move {
@@ -195,11 +196,11 @@ impl PoolInner {
 
 #[derive(Clone)]
 pub struct PoolClient {
-    inner: SendRequest<OpenStreams, Bytes>,
+    inner: SendRequest<DynOpenStream<Bytes>, Bytes>,
 }
 
 impl PoolClient {
-    pub fn new(tx: SendRequest<OpenStreams, Bytes>) -> Self {
+    pub fn new(tx: SendRequest<DynOpenStream<Bytes>, Bytes>) -> Self {
         Self { inner: tx }
     }
 

@@ -1,12 +1,17 @@
-#![cfg(feature = "http3")]
+#[cfg(feature = "h3-quinn")]
+pub mod quinn;
 
-pub mod connect;
+#[cfg(feature = "h3-s2n-quic")]
+pub mod s2n_quic;
+
+pub mod connection;
 pub(crate) mod dns;
-mod pool;
+pub mod pool;
+pub mod stream;
 
+use self::pool::{Key, Pool, PoolClient};
 use super::DynH3Connector;
 use crate::async_impl::body::ResponseBody;
-use crate::async_impl::h3_client::pool::{Key, Pool, PoolClient};
 #[cfg(feature = "cookies")]
 use crate::cookie;
 use crate::error::{BoxError, Error, Kind};
@@ -21,6 +26,47 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 use sync_wrapper::SyncWrapper;
 use tower::Service;
+
+#[cfg(feature = "h3-quinn")]
+pub use self::quinn::H3QuinnConnector;
+#[cfg(feature = "h3-s2n-quic")]
+pub use self::s2n_quic::H3S2nQuicConnector;
+/// H3 Client Config
+#[derive(Clone)]
+pub(crate) struct H3ClientConfig {
+    /// Set the maximum HTTP/3 header size this client is willing to accept.
+    ///
+    /// See [header size constraints] section of the specification for details.
+    ///
+    /// [header size constraints]: https://www.rfc-editor.org/rfc/rfc9114.html#name-header-size-constraints
+    ///
+    /// Please see docs in [`Builder`] in [`h3`].
+    ///
+    /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.max_field_section_size
+    pub(crate) max_field_section_size: Option<u64>,
+
+    /// Enable whether to send HTTP/3 protocol grease on the connections.
+    ///
+    /// Just like in HTTP/2, HTTP/3 also uses the concept of "grease"
+    ///
+    /// to prevent potential interoperability issues in the future.
+    /// In HTTP/3, the concept of grease is used to ensure that the protocol can evolve
+    /// and accommodate future changes without breaking existing implementations.
+    ///
+    /// Please see docs in [`Builder`] in [`h3`].
+    ///
+    /// [`Builder`]: https://docs.rs/h3/latest/h3/client/struct.Builder.html#method.send_grease
+    pub(crate) send_grease: Option<bool>,
+}
+
+impl Default for H3ClientConfig {
+    fn default() -> Self {
+        Self {
+            max_field_section_size: None,
+            send_grease: None,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct H3Client {
