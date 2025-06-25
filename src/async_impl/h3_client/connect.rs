@@ -85,13 +85,13 @@ impl H3Connector {
         let socket = socket2::Socket::new(
             socket2::Domain::for_address(socket_addr),
             socket2::Type::DGRAM,
-            Some(Protocol::UDP),
+            Some(socket2::Protocol::UDP),
         )?;
-        socket.reuse_address(true)?;
-        socket.reuse_port(true)?;
+        socket.set_reuse_address(true)?;
+        socket.set_reuse_port(true)?;
         if socket_addr.is_ipv6() {
             if let Err(e) = socket.set_only_v6(false) {
-                std::tracing::debug!(%e, "unable to make socket dual-stack");
+                log::debug!("unable to make socket dual-stack: {}", e);
             }
         }
         socket.bind(&socket_addr.into())?;
@@ -99,11 +99,12 @@ impl H3Connector {
             std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
         })?;
         let mut endpoint = Endpoint::new_with_abstract_socket(
-            config,
+            quinn::EndpointConfig::default(),
             None,
             runtime.wrap_udp_socket(socket.into())?,
             runtime,
-        );
+        )?;
+        endpoint.set_default_client_config(config);
         Ok(Self {
             resolver,
             endpoint,
